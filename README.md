@@ -6,6 +6,16 @@ Cloudflare 优选 IP，并通过 dnspod 自动切换，15 分钟更新一次
 
 > 在 DNSPod 中添加子域名的 Ipv4 和 Ipv6 解析记录后,可开启脚本
 
+```js
+# 安装依赖
+npm i
+```
+
+```js
+# 启动命令
+npm run dev
+```
+
 ### 2.使用现有服务
 
 > 博主维护的公共 `CNAME` 域名：`*.cf.cname.vvhan.com`， 同时支持 `IPv4` 和 `IPv6`.
