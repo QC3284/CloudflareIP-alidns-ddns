@@ -18,7 +18,7 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/yourusername/CloudflareIP-alidns-ddns.git
+git clone https://github.com/QC3284/CloudflareIP-alidns-ddns.git
 cd CloudflareIP-alidns-ddns
 ```
 
@@ -127,4 +127,6 @@ curl http://localhost:52100/updateCloudflareIp
 ## 技术支持
 
 如果遇到任何问题，请提交 issue：
-- GitHub: https://github.com/yourusername/CloudflareIP-alidns-ddns/issues
+- GitHub: https://github.com/QC3284/CloudflareIP-alidns-ddns/issues
+
+##Powerd By Deepseek
