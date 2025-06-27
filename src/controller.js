@@ -96,23 +96,39 @@ const updateAliDns = async (IP_DATA) => {
     console.log("优选IPv6结果:", JSON.stringify(DNS_DATA.v6, null, 2));
 
     // 处理子域名格式（将 @ 转换为空字符串）
-    const querySubDomain = SubDomain === '@' ? '' : SubDomain;
+    const queryRR = SubDomain === '@' ? '' : SubDomain;
     
-    console.log(`查询阿里云DNS记录: 域名=${Domain}, 子域名=${querySubDomain || '(主域名)'}`);
+    console.log(`查询阿里云DNS记录: 域名=${Domain}, 子域名=${queryRR || '(主域名)'}`);
     
+    // 查询域名记录
     const response = await client.request("DescribeDomainRecords", {
       DomainName: Domain,
-      RRKeyWord: querySubDomain,
+      RRKeyWord: queryRR,
       PageSize: 100
     }, {});
     
+    // 检查响应结构
     if (!response || !response.Records || !response.Records.Record) {
-      console.error("未找到任何DNS记录");
-      return "未找到任何DNS记录";
+      console.error("API响应结构异常:", JSON.stringify(response, null, 2));
+      return "API响应结构异常";
     }
     
     const records = response.Records.Record;
+    
+    if (!Array.isArray(records) {
+      console.error("记录不是数组:", typeof records);
+      return "记录不是数组";
+    }
+    
     console.log(`找到${records.length}条DNS记录`);
+    
+    if (records.length === 0) {
+      console.log("未找到匹配的DNS记录");
+      console.log("建议：在阿里云DNS控制台创建以下记录：");
+      console.log(`- 类型: A, 主机记录: ${queryRR || '@'}, 线路: 默认`);
+      console.log(`- 类型: AAAA, 主机记录: ${queryRR || '@'}, 线路: 默认`);
+      return "未找到匹配的DNS记录";
+    }
 
     let updatedCount = 0;
     let skippedCount = 0;
@@ -120,6 +136,12 @@ const updateAliDns = async (IP_DATA) => {
 
     // 更新记录
     for (const record of records) {
+      // 确保记录有必要的字段
+      if (!record.Line || !record.Type || !record.Value) {
+        console.warn("跳过无效记录:", record);
+        continue;
+      }
+      
       const line = record.Line;
       const mappedLine = lineTypeMap[line] || "default";
       const recordType = record.Type === "AAAA" ? "v6" : "v4";
