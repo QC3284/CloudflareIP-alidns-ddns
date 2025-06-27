@@ -107,15 +107,15 @@ const updateAliDns = async (IP_DATA) => {
       PageSize: 100
     }, {});
     
-    // 检查响应结构
-    if (!response || !response.Records || !response.Records.Record) {
+    // 检查响应结构 - 使用正确的路径 DomainRecords.Record
+    if (!response || !response.DomainRecords || !response.DomainRecords.Record) {
       console.error("API响应结构异常:", JSON.stringify(response, null, 2));
       return "API响应结构异常";
     }
     
-    const records = response.Records.Record;
+    const records = response.DomainRecords.Record;
     
-    if (!Array.isArray(records)) { // 修正这里的括号错误
+    if (!Array.isArray(records)) {
       console.error("记录不是数组:", typeof records);
       return "记录不是数组";
     }
