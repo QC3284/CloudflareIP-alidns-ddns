@@ -95,11 +95,14 @@ const updateAliDns = async (IP_DATA) => {
     console.log("优选IPv4结果:", JSON.stringify(DNS_DATA.v4, null, 2));
     console.log("优选IPv6结果:", JSON.stringify(DNS_DATA.v6, null, 2));
 
-    // 查询域名解析记录
-    console.log(`查询阿里云DNS记录: 域名=${Domain}, 子域名=${SubDomain}`);
+    // 处理子域名格式（将 @ 转换为空字符串）
+    const querySubDomain = SubDomain === '@' ? '' : SubDomain;
+    
+    console.log(`查询阿里云DNS记录: 域名=${Domain}, 子域名=${querySubDomain || '(主域名)'}`);
+    
     const response = await client.request("DescribeDomainRecords", {
       DomainName: Domain,
-      RRKeyWord: SubDomain,
+      RRKeyWord: querySubDomain,
       PageSize: 100
     }, {});
     
@@ -132,7 +135,7 @@ const updateAliDns = async (IP_DATA) => {
         try {
           await client.request("UpdateDomainRecord", {
             RecordId: record.RecordId,
-            RR: SubDomain,
+            RR: record.RR, // 使用查询到的RR值
             Type: record.Type,
             Value: newIp,
             Line: line,
