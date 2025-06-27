@@ -1,5 +1,5 @@
 {
-  "name": "CloudflareIP-dnspod-ddns",
+  "name": "CloudflareIP-alidns-ddns",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -11,8 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@alicloud/alidns20150109": "^2.2.2",
-    "@alicloud/openapi-client": "^0.3.0",
+    "@alicloud/pop-core": "^1.7.16",
     "axios": "^1.7.7",
     "koa": "^2.15.3",
     "moment": "^2.30.1",
