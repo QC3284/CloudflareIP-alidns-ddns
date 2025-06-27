@@ -5,12 +5,19 @@ const { accessKeyId, accessKeySecret, Domain, SubDomain } = require("./config");
 
 // 更新 Cloudflare 优选IP
 const updateCloudflareIp = async () => {
-  const res = await axios.get("https://api.vvhan.com/tool/cf_ip");
-  if (!res.data.success) {
-    console.log("\x1b[91m%s\x1b[0m", "更新 Cloudflare 优选IP失败");
-    return "更新 Cloudflare 优选IP失败";
+  console.log(`${moment().format("YYYY-MM-DD HH:mm:ss")} - 开始获取Cloudflare优选IP`);
+  try {
+    const res = await axios.get("https://api.vvhan.com/tool/cf_ip");
+    if (!res.data.success) {
+      console.error("\x1b[91m%s\x1b[0m", "更新Cloudflare优选IP失败: API返回失败状态");
+      return "更新Cloudflare优选IP失败: API返回失败状态";
+    }
+    console.log("获取Cloudflare优选IP成功");
+    return await updateAliDns(res.data.data);
+  } catch (error) {
+    console.error("\x1b[91m%s\x1b[0m", `获取Cloudflare优选IP失败: ${error.message}`);
+    return `获取Cloudflare优选IP失败: ${error.message}`;
   }
-  return await updateAliDns(res.data.data);
 };
 
 // 创建阿里云客户端
@@ -25,6 +32,7 @@ const createClient = () => {
 
 // 更新阿里云DNS
 const updateAliDns = async (IP_DATA) => {
+  console.log("开始更新阿里云DNS...");
   const client = createClient();
   
   // 线路类型映射
@@ -66,49 +74,71 @@ const updateAliDns = async (IP_DATA) => {
     }
   };
 
+  console.log("优选IPv4结果:", JSON.stringify(DNS_DATA.v4, null, 2));
+  console.log("优选IPv6结果:", JSON.stringify(DNS_DATA.v6, null, 2));
+
   try {
     // 查询域名解析记录
+    console.log(`查询阿里云DNS记录: 域名=${Domain}, 子域名=${SubDomain}`);
     const { Records } = await client.request("DescribeDomainRecords", {
       DomainName: Domain,
       RRKeyWord: SubDomain,
       PageSize: 100
     }, {});
     
-    if (!Records || !Records.Record || Records.Record.length === 0) {
-      console.log("未找到DNS记录");
-      return "未找到DNS记录";
+    if (!Records || !Records.Record) {
+      console.error("未找到任何DNS记录");
+      return "未找到任何DNS记录";
     }
+    
+    console.log(`找到${Records.Record.length}条DNS记录`);
+
+    let updatedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
 
     // 更新记录
     for (const record of Records.Record) {
-      const line = lineTypeMap[record.Line] || "default";
+      const line = record.Line;
+      const mappedLine = lineTypeMap[line] || "default";
       const recordType = record.Type === "AAAA" ? "v6" : "v4";
       
+      const currentIp = record.Value;
+      const newIp = DNS_DATA[recordType][mappedLine];
+      
+      console.log(`检查记录: ${line}线路 ${record.Type}记录 [当前: ${currentIp}] [新IP: ${newIp}]`);
+      
       // 检查IP是否需要更新
-      if (record.Value !== DNS_DATA[recordType][line]) {
+      if (currentIp !== newIp) {
+        console.log(`需要更新: ${line}线路 ${record.Type}记录`);
         try {
           await client.request("UpdateDomainRecord", {
             RecordId: record.RecordId,
             RR: SubDomain,
             Type: record.Type,
-            Value: DNS_DATA[recordType][line],
-            Line: record.Line,
-            TTL: record.TTL
+            Value: newIp,
+            Line: line,
+            TTL: record.TTL || 600
           }, {});
           
-          console.log(`更新成功: ${record.Line} ${record.Type} -> ${DNS_DATA[recordType][line]}`);
+          console.log(`\x1b[92m更新成功\x1b[0m: ${line}线路 ${record.Type}记录 -> ${newIp}`);
+          updatedCount++;
         } catch (error) {
-          console.error(`更新记录失败: ${record.Line} ${record.Type}`, error);
+          console.error(`\x1b[91m更新记录失败\x1b[0m: ${line}线路 ${record.Type}记录`, error);
+          errorCount++;
         }
       } else {
-        console.log(`无需更新: ${record.Line} ${record.Type}`);
+        console.log(`\x1b[93m无需更新\x1b[0m: ${line}线路 ${record.Type}记录 (IP相同)`);
+        skippedCount++;
       }
     }
 
-    return `${moment().format("YYYY.MM.DD HH:mm:ss")} - 阿里云DNS更新成功`;
+    const result = `${moment().format("YYYY.MM.DD HH:mm:ss")} - 阿里云DNS更新完成: ${updatedCount}更新/${skippedCount}跳过/${errorCount}错误`;
+    console.log(result);
+    return result;
   } catch (error) {
     console.error("阿里云DNS操作失败", error);
-    return "阿里云DNS操作失败";
+    return `阿里云DNS操作失败: ${error.message}`;
   }
 };
 
