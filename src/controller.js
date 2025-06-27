@@ -1,11 +1,7 @@
 const moment = require("moment");
 const axios = require("axios");
-// 配置
+const RPCClient = require("@alicloud/pop-core").RPCClient;
 const { accessKeyId, accessKeySecret, Domain, SubDomain } = require("./config");
-// 阿里云SDK
-const ALY = require("@alicloud/alidns20150109");
-const { Config } = require("@alicloud/openapi-client");
-const { RuntimeOptions } = require("@alicloud/tea-util");
 
 // 更新 Cloudflare 优选IP
 const updateCloudflareIp = async () => {
@@ -17,15 +13,19 @@ const updateCloudflareIp = async () => {
   return await updateAliDns(res.data.data);
 };
 
-// 更新阿里云DNS
-const updateAliDns = async (IP_DATA) => {
-  // 创建阿里云Client
-  let config = new Config({
+// 创建阿里云客户端
+const createClient = () => {
+  return new RPCClient({
     accessKeyId,
     accessKeySecret,
+    endpoint: "https://alidns.cn-hangzhou.aliyuncs.com",
+    apiVersion: "2015-01-09"
   });
-  config.endpoint = `alidns.cn-hangzhou.aliyuncs.com`;
-  const client = new ALY.default(config);
+};
+
+// 更新阿里云DNS
+const updateAliDns = async (IP_DATA) => {
+  const client = createClient();
   
   // 线路类型映射
   const lineTypeMap = {
@@ -66,51 +66,50 @@ const updateAliDns = async (IP_DATA) => {
     }
   };
 
-  // 查询域名解析记录
-  let describeDomainRecordsRequest = new ALY.DescribeDomainRecordsRequest({
-    domainName: Domain,
-    RRKeyWord: SubDomain,
-    pageSize: 100
-  });
-  
-  const runtime = new RuntimeOptions({});
-  let records;
   try {
-    const resp = await client.describeDomainRecordsWithOptions(describeDomainRecordsRequest, runtime);
-    records = resp.body.domainRecords.record;
-  } catch (error) {
-    console.error("获取阿里云DNS记录失败", error);
-    return "阿里云DNS查询失败";
-  }
-
-  // 更新记录
-  for (const record of records) {
-    const line = lineTypeMap[record.line] || "default";
-    const recordType = record.type === "AAAA" ? "v6" : "v4";
+    // 查询域名解析记录
+    const { Records } = await client.request("DescribeDomainRecords", {
+      DomainName: Domain,
+      RRKeyWord: SubDomain,
+      PageSize: 100
+    }, {});
     
-    // 检查IP是否需要更新
-    if (record.value !== DNS_DATA[recordType][line]) {
-      try {
-        const updateRequest = new ALY.UpdateDomainRecordRequest({
-          recordId: record.recordId,
-          RR: SubDomain,
-          type: record.type,
-          value: DNS_DATA[recordType][line],
-          line: record.line,
-          TTL: record.TTL
-        });
-        
-        await client.updateDomainRecordWithOptions(updateRequest, runtime);
-        console.log(`更新成功: ${record.line} ${record.type} -> ${DNS_DATA[recordType][line]}`);
-      } catch (error) {
-        console.error(`更新记录失败: ${record.line} ${record.type}`, error);
-      }
-    } else {
-      console.log(`无需更新: ${record.line} ${record.type}`);
+    if (!Records || !Records.Record || Records.Record.length === 0) {
+      console.log("未找到DNS记录");
+      return "未找到DNS记录";
     }
-  }
 
-  return `${moment().format("YYYY.MM.DD HH:mm:ss")} - 阿里云DNS更新成功`;
+    // 更新记录
+    for (const record of Records.Record) {
+      const line = lineTypeMap[record.Line] || "default";
+      const recordType = record.Type === "AAAA" ? "v6" : "v4";
+      
+      // 检查IP是否需要更新
+      if (record.Value !== DNS_DATA[recordType][line]) {
+        try {
+          await client.request("UpdateDomainRecord", {
+            RecordId: record.RecordId,
+            RR: SubDomain,
+            Type: record.Type,
+            Value: DNS_DATA[recordType][line],
+            Line: record.Line,
+            TTL: record.TTL
+          }, {});
+          
+          console.log(`更新成功: ${record.Line} ${record.Type} -> ${DNS_DATA[recordType][line]}`);
+        } catch (error) {
+          console.error(`更新记录失败: ${record.Line} ${record.Type}`, error);
+        }
+      } else {
+        console.log(`无需更新: ${record.Line} ${record.Type}`);
+      }
+    }
+
+    return `${moment().format("YYYY.MM.DD HH:mm:ss")} - 阿里云DNS更新成功`;
+  } catch (error) {
+    console.error("阿里云DNS操作失败", error);
+    return "阿里云DNS操作失败";
+  }
 };
 
 module.exports = { updateCloudflareIp };
