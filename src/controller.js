@@ -115,7 +115,7 @@ const updateAliDns = async (IP_DATA) => {
     
     const records = response.Records.Record;
     
-    if (!Array.isArray(records) {
+    if (!Array.isArray(records)) { // 修正这里的括号错误
       console.error("记录不是数组:", typeof records);
       return "记录不是数组";
     }
