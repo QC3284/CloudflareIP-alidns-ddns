@@ -3,15 +3,22 @@ const axios = require("axios");
 const RPCClient = require("@alicloud/pop-core").RPCClient;
 const { accessKeyId, accessKeySecret, Domain, SubDomain } = require("./config");
 
+console.log("控制器模块已加载");
+
 // 更新 Cloudflare 优选IP
 const updateCloudflareIp = async () => {
   console.log(`${moment().format("YYYY-MM-DD HH:mm:ss")} - 开始获取Cloudflare优选IP`);
   try {
-    const res = await axios.get("https://api.vvhan.com/tool/cf_ip");
-    if (!res.data.success) {
-      console.error("\x1b[91m%s\x1b[0m", "更新Cloudflare优选IP失败: API返回失败状态");
-      return "更新Cloudflare优选IP失败: API返回失败状态";
+    const res = await axios.get("https://api.vvhan.com/tool/cf_ip", {
+      timeout: 10000
+    });
+    
+    if (!res.data || !res.data.success) {
+      console.error("\x1b[91m%s\x1b[0m", "更新Cloudflare优选IP失败: API返回无效响应");
+      console.log("API响应:", res.data);
+      return "更新Cloudflare优选IP失败: API返回无效响应";
     }
+    
     console.log("获取Cloudflare优选IP成功");
     return await updateAliDns(res.data.data);
   } catch (error) {
@@ -22,17 +29,27 @@ const updateCloudflareIp = async () => {
 
 // 创建阿里云客户端
 const createClient = () => {
+  console.log("创建阿里云客户端");
   return new RPCClient({
     accessKeyId,
     accessKeySecret,
     endpoint: "https://alidns.cn-hangzhou.aliyuncs.com",
-    apiVersion: "2015-01-09"
+    apiVersion: "2015-01-09",
+    opts: {
+      timeout: 10000
+    }
   });
 };
 
 // 更新阿里云DNS
 const updateAliDns = async (IP_DATA) => {
   console.log("开始更新阿里云DNS...");
+  
+  if (!IP_DATA || !IP_DATA.v4 || !IP_DATA.v6) {
+    console.error("\x1b[91m%s\x1b[0m", "无效的IP数据");
+    return "无效的IP数据";
+  }
+  
   const client = createClient();
   
   // 线路类型映射
@@ -43,62 +60,63 @@ const updateAliDns = async (IP_DATA) => {
     "移动": "mobile"
   };
 
-  // 取最优选IP IPv4
-  const CM_IP_V4 = IP_DATA.v4.CM.reduce((minItem, currentItem) => 
-    currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v4.CM[0]);
-  const CU_IP_V4 = IP_DATA.v4.CU.reduce((minItem, currentItem) => 
-    currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v4.CU[0]);
-  const CT_IP_V4 = IP_DATA.v4.CT.reduce((minItem, currentItem) => 
-    currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v4.CT[0]);
-  
-  // 取最优选IP IPv6
-  const CM_IP_V6 = IP_DATA.v6.CM.reduce((minItem, currentItem) => 
-    currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v6.CM[0]);
-  const CU_IP_V6 = IP_DATA.v6.CU.reduce((minItem, currentItem) => 
-    currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v6.CU[0]);
-  const CT_IP_V6 = IP_DATA.v6.CT.reduce((minItem, currentItem) => 
-    currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v6.CT[0]);
-
-  const DNS_DATA = {
-    v4: {
-      "default": CT_IP_V4.ip,
-      "telecom": CT_IP_V4.ip,
-      "unicom": CU_IP_V4.ip,
-      "mobile": CM_IP_V4.ip
-    },
-    v6: {
-      "default": CT_IP_V6.ip,
-      "telecom": CT_IP_V6.ip,
-      "unicom": CU_IP_V6.ip,
-      "mobile": CM_IP_V6.ip
-    }
-  };
-
-  console.log("优选IPv4结果:", JSON.stringify(DNS_DATA.v4, null, 2));
-  console.log("优选IPv6结果:", JSON.stringify(DNS_DATA.v6, null, 2));
-
   try {
+    // 取最优选IP IPv4
+    const CM_IP_V4 = IP_DATA.v4.CM.reduce((minItem, currentItem) => 
+      currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v4.CM[0]);
+    const CU_IP_V4 = IP_DATA.v4.CU.reduce((minItem, currentItem) => 
+      currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v4.CU[0]);
+    const CT_IP_V4 = IP_DATA.v4.CT.reduce((minItem, currentItem) => 
+      currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v4.CT[0]);
+    
+    // 取最优选IP IPv6
+    const CM_IP_V6 = IP_DATA.v6.CM.reduce((minItem, currentItem) => 
+      currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v6.CM[0]);
+    const CU_IP_V6 = IP_DATA.v6.CU.reduce((minItem, currentItem) => 
+      currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v6.CU[0]);
+    const CT_IP_V6 = IP_DATA.v6.CT.reduce((minItem, currentItem) => 
+      currentItem.latency < minItem.latency ? currentItem : minItem, IP_DATA.v6.CT[0]);
+
+    const DNS_DATA = {
+      v4: {
+        "default": CT_IP_V4.ip,
+        "telecom": CT_IP_V4.ip,
+        "unicom": CU_IP_V4.ip,
+        "mobile": CM_IP_V4.ip
+      },
+      v6: {
+        "default": CT_IP_V6.ip,
+        "telecom": CT_IP_V6.ip,
+        "unicom": CU_IP_V6.ip,
+        "mobile": CM_IP_V6.ip
+      }
+    };
+
+    console.log("优选IPv4结果:", JSON.stringify(DNS_DATA.v4, null, 2));
+    console.log("优选IPv6结果:", JSON.stringify(DNS_DATA.v6, null, 2));
+
     // 查询域名解析记录
     console.log(`查询阿里云DNS记录: 域名=${Domain}, 子域名=${SubDomain}`);
-    const { Records } = await client.request("DescribeDomainRecords", {
+    const response = await client.request("DescribeDomainRecords", {
       DomainName: Domain,
       RRKeyWord: SubDomain,
       PageSize: 100
     }, {});
     
-    if (!Records || !Records.Record) {
+    if (!response || !response.Records || !response.Records.Record) {
       console.error("未找到任何DNS记录");
       return "未找到任何DNS记录";
     }
     
-    console.log(`找到${Records.Record.length}条DNS记录`);
+    const records = response.Records.Record;
+    console.log(`找到${records.length}条DNS记录`);
 
     let updatedCount = 0;
     let skippedCount = 0;
     let errorCount = 0;
 
     // 更新记录
-    for (const record of Records.Record) {
+    for (const record of records) {
       const line = record.Line;
       const mappedLine = lineTypeMap[line] || "default";
       const recordType = record.Type === "AAAA" ? "v6" : "v4";
